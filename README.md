@@ -155,4 +155,4 @@ rclone sync ... --dry-run
 
 Feel free to open issues or submit pull requests with improvements.
 
-Happy backing u
+Happy backing up! 💾☁️
