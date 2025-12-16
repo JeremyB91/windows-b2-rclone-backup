@@ -5,41 +5,66 @@ from pathlib import Path
 from datetime import datetime
 from getpass import getpass
 
-# Ensure required packages are installed
+# Auto install packages
 def install_prerequisites():
     try:
         import b2sdk.v2
         from colorama import init, Fore
+        import dotenv
     except ImportError:
-        subprocess.check_call([sys.executable, "-m", "pip", "install", "b2sdk", "colorama"])
+        subprocess.check_call([sys.executable, "-m", "pip", "install", "b2sdk", "colorama", "python-dotenv"])
         import b2sdk.v2
         from colorama import init, Fore
+        import dotenv
     init(autoreset=True)
 
 install_prerequisites()
 from colorama import Fore
 from b2sdk.v2 import InMemoryAccountInfo, B2Api, UploadSourceLocalFile
+from dotenv import load_dotenv, set_key
 
-# Prompt user for configuration
-def get_user_input():
-    print(Fore.CYAN + "\n=== Backblaze B2 Backup Setup ===")
+# Config file path
+ENV_PATH = Path(".env")
 
-    bucket_name = input(Fore.GREEN + "Enter your B2 bucket name: ").strip()
-    key_id = input(Fore.GREEN + "Enter your B2 application key ID: ").strip()
-    app_key = getpass(Fore.GREEN + "Enter your B2 application key (input hidden): ").strip()
-    local_folder = input(Fore.GREEN + "Enter the full path to the folder you want to backup: ").strip()
-    schedule = input(Fore.GREEN + "Enter backup schedule time (e.g., '03:00' for 3 AM daily): ").strip()
+def prompt_and_save_env():
+    print(Fore.CYAN + "\n=== Backup Configuration ===")
+    bucket_name = input(Fore.GREEN + "B2 Bucket Name: ").strip()
+    key_id = input(Fore.GREEN + "B2 Application Key ID: ").strip()
+    app_key = getpass(Fore.GREEN + "B2 Application Key (hidden): ").strip()
+    local_folder = input(Fore.GREEN + "Full path to folder to backup: ").strip()
+    schedule = input(Fore.GREEN + "Backup time (e.g. 03:00 for 3AM): ").strip()
 
-    return bucket_name, key_id, app_key, local_folder, schedule
+    with open(ENV_PATH, "w") as f:
+        f.write("")
 
-# Connect to Backblaze B2
+    set_key(ENV_PATH, "B2_BUCKET", bucket_name)
+    set_key(ENV_PATH, "B2_KEY_ID", key_id)
+    set_key(ENV_PATH, "B2_APP_KEY", app_key)
+    set_key(ENV_PATH, "BACKUP_PATH", local_folder)
+    set_key(ENV_PATH, "BACKUP_SCHEDULE", schedule)
+
+    print(Fore.YELLOW + "\n✅ Configuration saved to .env")
+
+def load_config():
+    if not ENV_PATH.exists():
+        prompt_and_save_env()
+
+    load_dotenv(dotenv_path=ENV_PATH)
+
+    return {
+        "bucket": os.getenv("B2_BUCKET"),
+        "key_id": os.getenv("B2_KEY_ID"),
+        "app_key": os.getenv("B2_APP_KEY"),
+        "backup_path": os.getenv("BACKUP_PATH"),
+        "schedule": os.getenv("BACKUP_SCHEDULE")
+    }
+
 def connect_to_b2(key_id, app_key):
     info = InMemoryAccountInfo()
     b2_api = B2Api(info)
     b2_api.authorize_account("production", key_id, app_key)
     return b2_api
 
-# Upload files to B2
 def upload_directory_to_b2(b2_api, bucket_name, local_folder):
     bucket = b2_api.get_bucket_by_name(bucket_name)
     local_folder_path = Path(local_folder)
@@ -52,7 +77,6 @@ def upload_directory_to_b2(b2_api, bucket_name, local_folder):
             print(Fore.BLUE + f"Uploading: {rel_path}")
             bucket.upload(UploadSourceLocalFile(str(file_path)), str(rel_path))
 
-# Schedule this script using Windows Task Scheduler
 def schedule_task(schedule_time):
     current_script = Path(__file__).resolve()
     task_name = "BackupToBackblazeB2"
@@ -63,30 +87,21 @@ def schedule_task(schedule_time):
         "/Create",
         "/SC", "DAILY",
         "/TN", task_name,
-        "/TR", f'"{sys.executable}" "{current_script}" --run',
+        "/TR", f'"{sys.executable}" "{current_script}"',
         "/ST", f"{hour.zfill(2)}:{minute.zfill(2)}",
         "/F"
     ]
 
-    print(Fore.MAGENTA + "\nScheduling task in Windows Task Scheduler...\n")
+    print(Fore.MAGENTA + "\nScheduling daily task in Windows Task Scheduler...\n")
     subprocess.run(" ".join(schtasks_cmd), shell=True)
 
-# Main flow
 def main():
-    if "--run" in sys.argv:
-        # Load saved config (for real world you'd save & load config securely)
-        print(Fore.CYAN + f"\nRunning backup at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-        # Here you would load from a config file, keeping this simple
-        return
+    config = load_config()
+    b2_api = connect_to_b2(config["key_id"], config["app_key"])
+    upload_directory_to_b2(b2_api, config["bucket"], config["backup_path"])
+    schedule_task(config["schedule"])
 
-    # Interactive setup
-    bucket_name, key_id, app_key, local_folder, schedule_time = get_user_input()
-
-    b2_api = connect_to_b2(key_id, app_key)
-    upload_directory_to_b2(b2_api, bucket_name, local_folder)
-    schedule_task(schedule_time)
-
-    print(Fore.GREEN + "\n✅ Backup uploaded and scheduled successfully!")
+    print(Fore.GREEN + "\n✅ Backup complete and task scheduled!")
 
 if __name__ == "__main__":
     main()
