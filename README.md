@@ -8,18 +8,18 @@ Designed for:
 
 ---
 
-## 🚀 Features
+## Features
 
-- ✅ Installs **rclone** automatically for all users (`C:\Program Files\rclone`)
-- ✅ Adds `rclone` to the **system PATH**
-- ✅ Reads all config from a `.env` file
-- ✅ Uses `rclone sync` to mirror a local folder to a B2 bucket
-- ✅ Simple logging to a file with optional log rotation
-- ✅ Works great with **Task Scheduler** for automated backups
+- Installs **rclone** automatically for all users (`C:\Program Files\rclone`)
+- Adds `rclone` to the **system PATH**
+- Reads all config from a `.env` file
+- Uses `rclone sync` to mirror a local folder to a B2 bucket
+- Simple logging to a file with optional log rotation
+- Works great with **Task Scheduler** for automated backups
 
 ---
 
-## 📁 Repository Structure
+## Repository Structure
 
 ```text
 windows-b2-rclone-backup/
