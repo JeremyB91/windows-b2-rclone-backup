@@ -6,7 +6,7 @@ Sync a local Windows folder to a Backblaze B2 bucket using `rclone`, with an int
 
 ## Overview
 
-`B2Backup.ps1` is a PowerShell script that:
+`Backup-ToB2.ps1` is a PowerShell script that:
 
 * Syncs a local folder to a Backblaze B2 bucket using `rclone sync`.
 * Runs in **interactive** mode to collect settings, write a `.env` file, and optionally create a **Windows Scheduled Task**.
