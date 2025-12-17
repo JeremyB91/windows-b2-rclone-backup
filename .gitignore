@@ -17,6 +17,7 @@ ENV/
 
 # 🧪 Test coverage, logs
 *.log
+logs/
 *.coverage
 coverage.xml
 *.pytest_cache/
