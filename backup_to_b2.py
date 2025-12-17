@@ -93,4 +93,39 @@ def upload_directory_to_b2(b2_api, bucket_name, local_folder):
 
     print(Fore.YELLOW + f"\n📤 Uploading files from '{local_folder_path}' to B2 bucket '{bucket_name}'...\n")
 
-    for file_path in local_folde
+    for file_path in local_folder_path.rglob('*'):
+        if file_path.is_file() and not should_exclude(file_path):
+            rel_path = file_path.relative_to(local_folder_path)
+            print(Fore.BLUE + f"🔼 Uploading: {rel_path}")
+            bucket.upload(UploadSourceLocalFile(str(file_path)), str(rel_path))
+        elif file_path.is_file():
+            print(Fore.LIGHTBLACK_EX + f"⏭️ Skipped (excluded): {file_path.name}")
+
+def schedule_task(schedule_time):
+    current_script = Path(__file__).resolve()
+    task_name = "BackupToBackblazeB2"
+    hour, minute = schedule_time.split(':')
+
+    schtasks_cmd = [
+        "schtasks",
+        "/Create",
+        "/SC", "DAILY",
+        "/TN", task_name,
+        "/TR", f'"{sys.executable}" "{current_script}"',
+        "/ST", f"{hour.zfill(2)}:{minute.zfill(2)}",
+        "/F"
+    ]
+
+    print(Fore.MAGENTA + "\n📅 Scheduling daily task in Windows Task Scheduler...\n")
+    subprocess.run(" ".join(schtasks_cmd), shell=True)
+
+def main():
+    config = load_config()
+    b2_api = connect_to_b2(config["key_id"], config["app_key"])
+    upload_directory_to_b2(b2_api, config["bucket"], config["backup_path"])
+    schedule_task(config["schedule"])
+
+    print(Fore.GREEN + "\n✅ Backup complete and task scheduled!")
+
+if __name__ == "__main__":
+    main()
