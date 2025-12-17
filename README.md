@@ -1,291 +1,196 @@
-# B2Backup.ps1
+# B2Backup.py
 
-Sync a local Windows folder to a Backblaze B2 bucket using `rclone`, with an interactive setup wizard and an optional scheduled task.
+Backup a local Windows folder to a Backblaze B2 bucket using Python — with interactive setup, `.env` configuration, file exclusion, and automated scheduling via Task Scheduler.
 
 ---
 
 ## Overview
 
-`Backup-ToB2.ps1` is a PowerShell script that:
+`b2_backup.py` is a Python script that:
 
-* Syncs a local folder to a Backblaze B2 bucket using `rclone sync`.
-* Runs in **interactive** mode to collect settings, write a `.env` file, and optionally create a **Windows Scheduled Task**.
-* Runs in **non-interactive** mode (for Task Scheduler) by loading configuration from the `.env` file.
-* Ensures `rclone` is installed and available on the system `PATH`.
-* Logs all activity to a configurable log file and performs simple log rotation.
+* Uploads a local folder to a Backblaze B2 bucket using the official `b2sdk`.
+* Runs in **interactive mode** to collect all configuration values and optionally schedule a **Windows Task Scheduler job**.
+* Stores user inputs in a `.env` file and uses it for all subsequent automated runs.
+* Supports **exclusion patterns**, **B2-native versioning**, and **configurable scheduling**.
+* Automatically installs all Python dependencies and handles B2 authentication.
 
 ---
 
 ## Features
 
-* Interactive configuration wizard
+* **Interactive Configuration Wizard**
+  * Prompts for:
+    * Folder to back up
+    * B2 bucket name
+    * B2 application key and key ID
+    * Schedule time (e.g. `03:00`)
+    * File extensions to exclude (e.g. `.tmp,.log`)
+    * Whether to let B2 manage file versioning
 
-  * Prompts for local and remote paths, logging, and rclone tuning.
-  * Writes all configuration to a `.env` file next to the script.
-* Optional scheduled task setup
+* **Environment File Support**
+  * Saves all settings in a `.env` file
+  * Can be re-run to update the config
+  * Also loads `exclude_patterns.txt` for ignored file types
 
-  * Daily, weekly, or at-logon triggers.
-  * Runs the script in non-interactive mode.
-* Automatic rclone installation (if missing)
+* **B2 Native File Versioning**
+  * Uses B2’s built-in file versioning and lifecycle rules
+  * Uploads without deleting older versions (unless configured in the bucket)
 
-  * Downloads and installs `rclone` to a configurable directory.
-  * Adds that directory to the system `PATH`.
-* Non-interactive backup mode
-
-  * Intended for Task Scheduler to run without prompts.
-* Logging and log rotation
-
-  * Logs to a file (default `C:\Logs\B2Backup.log`).
-  * Old logs are rotated based on retention days.
+* **Optional Scheduled Task Creation**
+  * Automates daily backups using `schtasks`
+  * Uses your chosen backup time
+  * Task is created only once and uses the `.env` file thereafter
 
 ---
 
 ## Requirements
 
-* Windows (with PowerShell 5.1 or later).
-* Administrator privileges (required for):
-
-  * Installing `rclone` to `C:\Program Files`.
-  * Updating the system `PATH`.
-  * Creating or updating a Windows Scheduled Task.
-* A Backblaze B2 account.
-* A configured `rclone` remote pointing to your B2 bucket (e.g., `b2:my-remote-bucket`).
-
-> The script can attempt to validate your rclone remote, but you are responsible for creating and testing it via `rclone config`.
+* Windows 10/11
+* Python 3.8+ with `pip`
+* Administrator privileges (for Task Scheduler setup)
+* Backblaze B2 account and application key
 
 ---
 
-## Script parameters
+## Script Parameters
 
-```powershell
-param(
-    [switch]$NonInteractive,
-    [switch]$Setup
-)
+No parameters are required — everything is handled via prompts on first run.
+
+To reconfigure, just delete the `.env` file and rerun:
+
+```bash
+python b2_backup.py
 ```
 
-* `-Setup`
-
-  * Forces the interactive setup wizard, even if a `.env` file already exists.
-* `-NonInteractive`
-
-  * Skips all prompts and runs a backup using the existing `.env` file.
-  * This is the mode used by the Scheduled Task.
-
-If you run the script with **no parameters**, it will:
-
-* Run the interactive setup if no `.env` file exists.
-* Otherwise, prompt you to either run a backup immediately or re-run the interactive setup.
-
 ---
 
-## Getting started
+## Getting Started
 
-1. Open **PowerShell as Administrator**.
+1. Open **Command Prompt or PowerShell as Administrator**
+2. Navigate to the script folder
+3. Run the setup wizard:
 
-2. Navigate to the directory containing `B2Backup.ps1`.
-
-3. Run the interactive setup:
-
-   ```powershell
-   .\B2Backup.ps1 -Setup
-   ```
-
-4. Follow the prompts to:
-
-   * Choose the local folder to back up.
-   * Specify the rclone remote path (e.g. `b2:my-remote-bucket/server1`).
-   * Configure logging and retention.
-   * Configure rclone performance parameters.
-   * Optionally create or update a Scheduled Task.
-
-5. (Optional) At the end of setup you can choose to run a backup immediately.
-
-Once the wizard finishes, a `.env` file will be created in the same folder as the script.
-
----
-
-## Running backups
-
-### Interactive one-off backup
-
-If a `.env` file already exists, you can trigger a manual backup from an elevated PowerShell prompt:
-
-```powershell
-.\B2Backup.ps1
+```bash
+python b2_backup.py
 ```
 
-You will be offered a simple menu to:
+4. Follow the interactive prompts:
+   * Select a folder to back up
+   * Enter your B2 credentials
+   * Choose your daily backup time
+   * Add any file types to exclude
+   * Choose whether to enable B2-managed versioning
 
-1. Run backup now using existing configuration.
-2. Re-run the interactive setup.
+At the end of setup:
+* `.env` and `exclude_patterns.txt` are saved
+* A Windows Scheduled Task will be created to run this daily
 
-### Non-interactive backup (Task Scheduler / automation)
+---
 
-To run non-interactively (no prompts), use:
+## Running Backups
 
-```powershell
-.\B2Backup.ps1 -NonInteractive
+### Manual one-off backup
+
+If `.env` exists, just run:
+
+```bash
+python b2_backup.py
 ```
 
-This mode:
+It will:
+* Authenticate to B2
+* Read the `.env` and exclusion file
+* Upload all eligible files to the bucket
 
-* Loads configuration from `.env`.
-* Ensures `rclone` is installed and in `PATH`.
-* Runs `rclone sync`.
-* Logs output to the configured log file.
+### Automated backup (Task Scheduler)
 
-> This is the mode that the Scheduled Task created by the wizard uses.
+The setup process schedules the script like this:
 
----
+```text
+schtasks /Create /SC DAILY /TN BackupToBackblazeB2 /TR "python b2_backup.py" /ST 03:00 /F
+```
 
-## Environment file (`.env`)
-
-The script reads configuration from a `.env` file living alongside `B2Backup.ps1`.
-
-Example keys written by the wizard:
-
-| Key                   | Description                                               | Example                            |
-| --------------------- | --------------------------------------------------------- | ---------------------------------- |
-| `LOCAL_PATH`          | Local folder to back up                                   | `C:\Data`                          |
-| `REMOTE_PATH`         | rclone remote + path                                      | `b2:my-remote-bucket/server1`      |
-| `LOG_FILE`            | Log file path                                             | `C:\Logs\B2Backup.log`             |
-| `RETENTION_DAYS`      | Days to keep log file before rotation                     | `30`                               |
-| `RCLONE_INSTALL_DIR`  | Where to install `rclone` if missing                      | `C:\Program Files\rclone`          |
-| `RCLONE_DOWNLOAD_URL` | rclone zip download URL                                   | `https://downloads.rclone.org/...` |
-| `RCLONE_TRANSFERS`    | Concurrent file transfers                                 | `8`                                |
-| `RCLONE_CHECKERS`     | Concurrent checks                                         | `16`                               |
-| `RCLONE_FAST_LIST`    | Whether to use `--fast-list` (`true` or `false`)          | `true`                             |
-| `RCLONE_LOG_LEVEL`    | rclone log level (`DEBUG`, `INFO`, `NOTICE`, `ERROR`)     | `INFO`                             |
-| `RCLONE_EXTRA_ARGS`   | Extra arguments appended to the rclone command (optional) | `--bwlimit 5M`                     |
-
-The interactive wizard will build and update this file for you, but you can also edit it manually.
-
-> The script also loads each key into the process environment so that child processes (like `rclone`) can see them.
+This will trigger the backup daily using the saved configuration.
 
 ---
 
-## What the script does under the hood
+## Environment File (`.env`)
 
-At a high level:
+The script stores and reads configuration from a `.env` file in the same directory.
 
-1. **Requires elevation**
-
-   * `Ensure-Admin` checks that the script is running as Administrator and exits with an error if not.
-
-2. **Interactive setup (when applicable)**
-
-   * Prompts for all required configuration.
-   * Writes `.env` using `Write-DotEnv`.
-   * Optionally calls `Setup-ScheduledTask` to create or update a Windows Scheduled Task.
-
-3. **Scheduled task creation (optional)**
-
-   * Uses `New-ScheduledTaskTrigger` to configure one of:
-
-     * Daily at a specified time.
-     * Weekly on a specified day and time.
-     * At user logon.
-   * Runs PowerShell with:
-
-     * `-NoProfile -ExecutionPolicy Bypass -File "B2Backup.ps1" -NonInteractive`
-   * Uses credentials you provide to run as the appropriate user.
-
-4. **Backup execution**
-
-   * Loads configuration from `.env` (`Load-DotEnv`).
-   * Ensures `rclone` is installed (`Ensure-Rclone` / `Install-Rclone`).
-   * Optionally validates the rclone remote (`Test-RcloneRemote`).
-   * Builds `rclone sync` arguments from configuration.
-   * Starts `rclone` as a background process, capturing stdout and stderr.
-   * Logs success or failure.
-   * Optionally rotates logs (`Cleanup-Logs`).
-
-5. **Logging**
-
-   * All log messages go through `Write-Log`.
-   * If the log directory does not exist, it is created automatically.
+| Key              | Description                                  |
+|------------------|----------------------------------------------|
+| `B2_BUCKET`      | Backblaze B2 bucket name                     |
+| `B2_KEY_ID`      | B2 application key ID                        |
+| `B2_APP_KEY`     | B2 application key                           |
+| `BACKUP_PATH`    | Full path to local backup folder             |
+| `BACKUP_SCHEDULE`| Daily backup time (e.g. `03:00`)             |
+| `VERSIONING`     | Whether to allow B2 to version files (`yes`/`no`) |
 
 ---
 
-## Logging and log rotation
+## File Exclusion
 
-* Logs are written to the file at `LOG_FILE`.
-* Each run writes a header such as `==== Backup Started ====`, followed by:
+If you choose to exclude files during setup, a file called `exclude_patterns.txt` will be created.
 
-  * Configuration summary (paths, log file location).
-  * `rclone` output (stdout/stderr).
-  * Final success/failure messages.
-* `Cleanup-Logs` optionally deletes the log file if it is older than `RETENTION_DAYS`, allowing it to be recreated fresh on the next run.
+Each line should contain one extension (with the dot), e.g.:
 
-> If you need more advanced log rotation, you can disable this behavior and use an external log management tool.
+```
+.tmp
+.log
+.mp4
+```
+
+These files will be skipped during every backup run.
 
 ---
 
-## Security considerations
+## Logging
 
-* **Do not commit real secrets** (API keys, tokens, etc.) to a public repository.
-* The `.env` file typically contains paths and non-secret configuration.
-* `rclone` stores credentials in its own config file (usually in the user profile) and is not managed by this script.
-* The Scheduled Task will store the run-as credentials within Windows. Use a dedicated service account if appropriate.
+By default, logs are printed to the console. In future versions, logging to file will be supported.
+
+---
+
+## Security Considerations
+
+* The `.env` file stores your B2 credentials in plaintext — secure it appropriately.
+* Scheduled Tasks will run under your Windows user account.
+* Use Windows NTFS permissions to restrict access to this script and its configuration files.
 
 ---
 
 ## Troubleshooting
 
-* "This script must be run as Administrator"
+* **“Permission Denied” or “Access Denied”**
+  * Ensure you run the script with Administrator privileges when scheduling
 
-  * Make sure you opened PowerShell with **Run as administrator**.
+* **“No module named b2sdk”**
+  * The script installs all dependencies automatically — ensure you’re using Python 3 and have `pip` installed
 
-* "ERROR: .env file not found"
+* **“.env file not found”**
+  * Run the script again to reconfigure
 
-  * Run the interactive setup: `.\B2Backup.ps1 -Setup`.
-
-* rclone remote warnings
-
-  * The script may log that the remote is not configured correctly.
-  * Run `rclone config` manually and verify that `rclone ls <your-remote>:` works.
-
-* rclone not found or not installing
-
-  * Check that `RCLONE_DOWNLOAD_URL` is reachable.
-  * Verify that `RCLONE_INSTALL_DIR` is writeable by an Administrator.
-
-* Backup fails immediately
-
-  * Check that `LOCAL_PATH` exists and is accessible.
-  * Check that `REMOTE_PATH` points to a valid rclone remote and path.
-  * Review the log file at `LOG_FILE` for detailed error information.
+* **Backup not running via Task Scheduler**
+  * Open Task Scheduler > Find `BackupToBackblazeB2` > Review history
+  * Ensure `Start In` directory is set to the folder containing `b2_backup.py`
 
 ---
 
-## Example usage
+## Roadmap
 
-### Initial setup and schedule a daily backup
-
-```powershell
-# Run as Administrator
-.\B2Backup.ps1 -Setup
-```
-
-Follow the prompts, choose a local folder and remote path, and configure a daily schedule. At the end, optionally run the backup once to make sure everything works.
-
-### Non-interactive run from Task Scheduler
-
-Configure a Scheduled Task action similar to:
-
-```text
-Program/script: powershell.exe
-Arguments: -NoProfile -ExecutionPolicy Bypass -File "C:\Path\To\B2Backup.ps1" -NonInteractive
-Start in: C:\Path\To
-```
-
-The wizard can create this task for you automatically.
+* [ ] Support file compression before upload
+* [ ] Optionally encrypt files before sending to B2
+* [ ] Add email alerts on success/failure
+* [ ] Add logging to file
 
 ---
 
-## Notes
+## License
 
-* This script is designed for Windows environments.
-* You can adapt it to your own environment or use it as a starting point for other rclone-based backup workflows.
-* Contributions and improvements are welcome.
+MIT License — free to use, improve, and distribute.
+
+---
+
+## Author
+
+Built with ❤️ by Python Copilot (v2)
