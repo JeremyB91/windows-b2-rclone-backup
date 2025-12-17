@@ -1,8 +1,8 @@
 import os
+import site
 import subprocess
 import sys
 from pathlib import Path
-from datetime import datetime
 from getpass import getpass
 
 # Auto install packages
@@ -12,13 +12,21 @@ def install_prerequisites():
         from colorama import init, Fore
         import dotenv
     except ImportError:
-        subprocess.check_call([sys.executable, "-m", "pip", "install", "b2sdk", "colorama", "python-dotenv"])
+        subprocess.check_call([
+            sys.executable, "-m", "pip", "install",
+            "--user", "b2sdk", "colorama", "python-dotenv"
+        ])
+        site.main()
+        user_site = site.getusersitepackages()
+        if user_site not in sys.path:
+            sys.path.append(user_site)
         import b2sdk.v2
         from colorama import init, Fore
         import dotenv
     init(autoreset=True)
 
 install_prerequisites()
+
 from colorama import Fore
 from b2sdk.v2 import InMemoryAccountInfo, B2Api, UploadSourceLocalFile
 from dotenv import load_dotenv, set_key
@@ -42,9 +50,8 @@ def prompt_and_save_env():
         with open(EXCLUDE_PATH, "w") as f:
             f.write("\n".join([e.strip() for e in exclude.split(",") if e.strip()]))
         print(Fore.YELLOW + f"📝 Exclusion patterns saved to {EXCLUDE_PATH}")
-    else:
-        if EXCLUDE_PATH.exists():
-            EXCLUDE_PATH.unlink()
+    elif EXCLUDE_PATH.exists():
+        EXCLUDE_PATH.unlink()
 
     with open(ENV_PATH, "w") as f:
         f.write("")
@@ -95,9 +102,9 @@ def upload_directory_to_b2(b2_api, bucket_name, local_folder):
 
     for file_path in local_folder_path.rglob('*'):
         if file_path.is_file() and not should_exclude(file_path):
-            rel_path = file_path.relative_to(local_folder_path)
+            rel_path = str(file_path.relative_to(local_folder_path)).replace("\\", "/")
             print(Fore.BLUE + f"🔼 Uploading: {rel_path}")
-            bucket.upload(UploadSourceLocalFile(str(file_path)), str(rel_path))
+            bucket.upload(UploadSourceLocalFile(str(file_path)), rel_path)
         elif file_path.is_file():
             print(Fore.LIGHTBLACK_EX + f"⏭️ Skipped (excluded): {file_path.name}")
 
@@ -124,7 +131,6 @@ def main():
     b2_api = connect_to_b2(config["key_id"], config["app_key"])
     upload_directory_to_b2(b2_api, config["bucket"], config["backup_path"])
     schedule_task(config["schedule"])
-
     print(Fore.GREEN + "\n✅ Backup complete and task scheduled!")
 
 if __name__ == "__main__":
