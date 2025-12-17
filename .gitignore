@@ -1,0 +1,46 @@
+# 🔒 Environment & secrets
+.env
+exclude_patterns.txt
+
+# 🐍 Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.pyc
+
+# 📦 Virtual environment
+.venv/
+env/
+venv/
+ENV/
+
+# 🧪 Test coverage, logs
+*.log
+*.coverage
+coverage.xml
+*.pytest_cache/
+
+# 🪟 Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# 📦 Installer files
+*.egg-info/
+dist/
+build/
+
+# 💾 Backup or temp files
+*.bak
+*.tmp
+*.swp
+*~
+
+# 🧠 VSCode/IDE
+.vscode/
+.idea/
+
+# 📂 OneDrive sync leftovers
+*.tmp.driveupload
+~$*
