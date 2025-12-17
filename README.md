@@ -1,4 +1,4 @@
-# B2Backup.py
+# backup_to_b2.py
 
 Backup a local Windows folder to a Backblaze B2 bucket using Python — with interactive setup, `.env` configuration, file exclusion, and automated scheduling via Task Scheduler.
 
@@ -6,7 +6,7 @@ Backup a local Windows folder to a Backblaze B2 bucket using Python — with int
 
 ## Overview
 
-`b2_backup.py` is a Python script that:
+`backup_to_b2.py` is a Python script that:
 
 * Uploads a local folder to a Backblaze B2 bucket using the official `b2sdk`.
 * Runs in **interactive mode** to collect all configuration values and optionally schedule a **Windows Task Scheduler job**.
