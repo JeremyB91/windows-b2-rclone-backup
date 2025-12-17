@@ -172,6 +172,124 @@ The script will:
 
 ---
 
+## 🕒 Automatic Backups with Windows Task Scheduler
+
+If you want this backup to run **automatically on a regular schedule** (daily, weekly, etc.), you can use **Windows Task Scheduler**.
+
+This script is already designed to run **non‑interactively** once `.env` exists, making it safe to schedule.
+
+### ✅ Prerequisites
+
+Before scheduling:
+
+* Run the script **at least once manually**
+* Confirm that:
+
+  * `.env` exists
+  * The backup completes successfully
+
+---
+
+### 🧭 Step‑by‑Step: Create a Scheduled Task
+
+1. Open **Task Scheduler**
+2. Click **Create Task…** (not *Basic Task*)
+
+---
+
+### 📝 General Tab
+
+* **Name:** Backblaze B2 Backup
+* **Description:** Runs Python backup_to_b2.py and uploads files to Backblaze B2
+* Select **Run whether user is logged on or not**
+* Check **Run with highest privileges**
+
+---
+
+### ⏰ Triggers Tab
+
+1. Click **New…**
+2. Choose your schedule:
+
+   * Daily (most common)
+   * Weekly
+   * Or any custom interval you prefer
+3. Set the time
+4. Click **OK**
+
+---
+
+### ▶️ Actions Tab
+
+1. Click **New…**
+2. **Action:** Start a program
+3. **Program/script:**
+
+```text
+C:\Path\To\python.exe
+```
+
+> 💡 Example:
+> `C:\Users\Jeremy\AppData\Local\Programs\Python\Python311\python.exe`
+
+4. **Add arguments:**
+
+```text
+backup_to_b2.py
+```
+
+5. **Start in:**
+
+```text
+C:\Path\To\Your\Backup\Folder
+```
+
+> ⚠️ This must be the directory containing:
+>
+> * `backup_to_b2.py`
+> * `.env`
+> * `logs/`
+
+6. Click **OK**
+
+---
+
+### 🔌 Conditions Tab (Recommended)
+
+* ✅ Start the task only if the computer is on AC power
+* ❌ Stop if the computer switches to battery power (optional)
+
+---
+
+### ⚙️ Settings Tab (Recommended)
+
+* ✅ Allow task to be run on demand
+* ✅ Run task as soon as possible after a scheduled start is missed
+* ❌ Stop the task if it runs longer than (leave unchecked)
+* ❌ Do not force stop
+
+---
+
+### 🔐 Final Step
+
+When prompted:
+
+* Enter your Windows account password
+* Click **OK** to save the task
+
+You can now right‑click the task and choose **Run** to test it.
+
+---
+
+### 📌 Notes & Best Practices
+
+* Use an **absolute path** to `python.exe`
+* Avoid network drives unless they are always available
+* Logs will continue to accumulate in the `logs/` folder
+* Review Task Scheduler **History** tab if a run fails
+
+---
+
 ## ☁️ File Versioning & Retention
 
 If versioning is enabled during setup:
