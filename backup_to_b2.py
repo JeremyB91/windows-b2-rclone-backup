@@ -5,7 +5,6 @@ import sys
 from pathlib import Path
 from getpass import getpass
 
-# Auto install packages
 def install_prerequisites():
     try:
         import b2sdk.v2
@@ -40,7 +39,36 @@ def prompt_and_save_env():
     key_id = input(Fore.GREEN + "🔑 B2 Application Key ID: ").strip()
     app_key = getpass(Fore.GREEN + "🔒 B2 Application Key (hidden): ").strip()
     local_folder = input(Fore.GREEN + "📁 Full path to folder to backup: ").strip()
-    schedule = input(Fore.GREEN + "⏰ Backup time (e.g. 03:00 for 3AM): ").strip()
+
+    # Schedule setup
+    print(Fore.CYAN + "\n📅 Schedule Options:")
+    print("1. Daily")
+    print("2. Weekly (e.g. every Monday)")
+    print("3. Monthly (e.g. every 15th)")
+    print("4. One-Time")
+    print("5. Do not schedule")
+    schedule_type = input(Fore.GREEN + "Select a schedule type [1-5]: ").strip()
+
+    schedule_map = {
+        "1": "DAILY",
+        "2": "WEEKLY",
+        "3": "MONTHLY",
+        "4": "ONCE",
+        "5": "NONE"
+    }
+    schedule_type = schedule_map.get(schedule_type, "DAILY")
+    task_details = {"type": schedule_type}
+
+    if schedule_type != "NONE":
+        time_input = input(Fore.GREEN + "⏰ Time (HH:MM, 24h format): ").strip()
+        task_details["time"] = time_input
+
+        if schedule_type == "WEEKLY":
+            days = input(Fore.GREEN + "🗓️ Enter days (e.g. MON,TUE,FRI): ").strip().upper()
+            task_details["days"] = days
+        elif schedule_type == "MONTHLY":
+            dates = input(Fore.GREEN + "📅 Enter day(s) of month (e.g. 1,15,28): ").strip()
+            task_details["dates"] = dates
 
     versioning = input(Fore.GREEN + "🗂️ Let B2 manage versions of files? [Y/n]: ").strip().lower()
     enable_versioning = "yes" if versioning != "n" else "no"
@@ -60,15 +88,17 @@ def prompt_and_save_env():
     set_key(ENV_PATH, "B2_KEY_ID", key_id)
     set_key(ENV_PATH, "B2_APP_KEY", app_key)
     set_key(ENV_PATH, "BACKUP_PATH", local_folder)
-    set_key(ENV_PATH, "BACKUP_SCHEDULE", schedule)
     set_key(ENV_PATH, "VERSIONING", enable_versioning)
+    set_key(ENV_PATH, "SCHEDULE_TYPE", task_details["type"])
+    set_key(ENV_PATH, "SCHEDULE_TIME", task_details.get("time", ""))
+    set_key(ENV_PATH, "SCHEDULE_DAYS", task_details.get("days", ""))
+    set_key(ENV_PATH, "SCHEDULE_DATES", task_details.get("dates", ""))
 
     print(Fore.YELLOW + "\n✅ Configuration saved to .env")
 
 def load_config():
     if not ENV_PATH.exists():
         prompt_and_save_env()
-
     load_dotenv(dotenv_path=ENV_PATH)
 
     return {
@@ -76,8 +106,11 @@ def load_config():
         "key_id": os.getenv("B2_KEY_ID"),
         "app_key": os.getenv("B2_APP_KEY"),
         "backup_path": os.getenv("BACKUP_PATH"),
-        "schedule": os.getenv("BACKUP_SCHEDULE"),
-        "versioning": os.getenv("VERSIONING", "yes")
+        "versioning": os.getenv("VERSIONING", "yes"),
+        "schedule_type": os.getenv("SCHEDULE_TYPE"),
+        "schedule_time": os.getenv("SCHEDULE_TIME"),
+        "schedule_days": os.getenv("SCHEDULE_DAYS"),
+        "schedule_dates": os.getenv("SCHEDULE_DATES"),
     }
 
 def connect_to_b2(key_id, app_key):
@@ -108,30 +141,23 @@ def upload_directory_to_b2(b2_api, bucket_name, local_folder):
         elif file_path.is_file():
             print(Fore.LIGHTBLACK_EX + f"⏭️ Skipped (excluded): {file_path.name}")
 
-def schedule_task(schedule_time):
+def schedule_task(cfg):
+    if cfg["schedule_type"] == "NONE":
+        print(Fore.YELLOW + "\n⚠️ Skipping task scheduling.")
+        return
+
     current_script = Path(__file__).resolve()
     task_name = "BackupToBackblazeB2"
-    hour, minute = schedule_time.split(':')
 
-    schtasks_cmd = [
+    cmd = [
         "schtasks",
         "/Create",
-        "/SC", "DAILY",
         "/TN", task_name,
         "/TR", f'"{sys.executable}" "{current_script}"',
-        "/ST", f"{hour.zfill(2)}:{minute.zfill(2)}",
         "/F"
     ]
 
-    print(Fore.MAGENTA + "\n📅 Scheduling daily task in Windows Task Scheduler...\n")
-    subprocess.run(" ".join(schtasks_cmd), shell=True)
-
-def main():
-    config = load_config()
-    b2_api = connect_to_b2(config["key_id"], config["app_key"])
-    upload_directory_to_b2(b2_api, config["bucket"], config["backup_path"])
-    schedule_task(config["schedule"])
-    print(Fore.GREEN + "\n✅ Backup complete and task scheduled!")
-
-if __name__ == "__main__":
-    main()
+    if cfg["schedule_type"] == "DAILY":
+        cmd += ["/SC", "DAILY", "/ST", cfg["schedule_time"]]
+    elif cfg["schedule_type"] == "WEEKLY":
+        cmd += ["/SC", "WEEKLY", "/D", cfg["schedule_days"], "/ST"_]()]()
