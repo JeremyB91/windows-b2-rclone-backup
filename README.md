@@ -1,8 +1,8 @@
 # 🐍 Backup to Backblaze B2 (Python Script)
 
-A **simple, interactive Python backup script** for uploading a local folder to **Backblaze B2**. The script walks you through configuration on first run, stores settings in a `.env` file, and reuses them for future backups.
+A **simple, interactive Python backup script** that uploads a local folder to a **Backblaze B2 bucket** using the official `b2sdk`. The script handles first‑run configuration, credential storage via `.env`, optional file‑type exclusions, and automatic dependency installation.
 
-This version is **pure Python** (no rclone) and uses the official **`b2sdk`** library.
+This README reflects the **current behavior of the script exactly** — no scheduling, no Task Scheduler integration, and no rclone usage.
 
 ---
 
@@ -10,65 +10,76 @@ This version is **pure Python** (no rclone) and uses the official **`b2sdk`** li
 
 `backup_to_b2.py`:
 
-* Prompts you for required configuration on first run
-* Saves configuration securely to a local `.env` file
-* Uploads **all files recursively** from a chosen folder to a B2 bucket
-* Preserves directory structure in B2
-* Optionally excludes file extensions (e.g. `.log`, `.tmp`)
-* Lets **Backblaze B2 handle file versioning and retention**
-* Automatically installs required Python dependencies if missing
+* Prompts for Backblaze B2 credentials and backup settings on first run
+* Stores configuration in a local `.env` file
+* Uploads **all files** from a specified folder to a B2 bucket
+* Preserves folder structure inside the bucket
+* Optionally excludes files by extension (e.g. `.log`, `.tmp`)
+* Relies on **Backblaze B2 bucket versioning** for retention/history
+* Automatically installs required Python packages if missing
 
-This script is designed to be:
+---
 
-* ✔ Easy to run manually
-* ✔ Safe to automate (Task Scheduler, cron, etc.)
-* ✔ Simple and auditable
+## 🚀 Features
+
+* ✅ **Interactive setup wizard** (first run only)
+* 🔐 **Secure credential entry** (application key hidden at prompt)
+* 🗂️ **Optional file extension exclusions**
+* ☁️ **Native Backblaze B2 uploads via `b2sdk`**
+* 📁 **Recursive directory upload** with structure preserved
+* 🧰 **Automatic dependency installation** (`b2sdk`, `colorama`, `python-dotenv`)
+
+---
+
+## ❌ What This Script Does *Not* Do
+
+To avoid confusion, this script **does not**:
+
+* Create Windows Scheduled Tasks
+* Run on a schedule automatically
+* Perform incremental or delta comparisons
+* Delete remote files
+* Use rclone
+* Encrypt files locally
+
+Scheduling should be handled externally (Task Scheduler, cron, etc.) if desired.
 
 ---
 
 ## 🧰 Requirements
 
-* **Windows, Linux, or macOS**
-* **Python 3.8+** available in PATH
+* **Windows, macOS, or Linux**
+* **Python 3.8+**
 * A **Backblaze B2 account** with:
 
-  * Bucket name
+  * A bucket
   * Application Key ID
   * Application Key
 
-> 🔒 Credentials are stored locally in `.env`. Never commit this file to GitHub.
+> 💡 Use a **limited‑scope application key** whenever possible.
 
 ---
 
-## 🚀 Getting Started
+## ⚙️ Getting Started
 
-### 1. Download or clone the project
+### 1️⃣ Download the Script
 
-```bash
-git clone <your-repo-url>
-cd <repo-folder>
-```
+Place `backup_to_b2.py` in an empty directory where you want the config files to live.
 
-Or download `backup_to_b2.py` directly.
-
----
-
-### 2. Run the script
+### 2️⃣ Run the Script
 
 ```bash
 python backup_to_b2.py
 ```
 
-On first run, you will be prompted for:
+On first run, you’ll be prompted for:
 
 * 🪣 **B2 Bucket Name**
-* 🔑 **Application Key ID**
-* 🔒 **Application Key** (hidden input)
-* 📁 **Full path to the folder you want to back up**
-* 🗂️ Whether B2 should manage file versions
+* 🔑 **B2 Application Key ID**
+* 🔒 **B2 Application Key** (hidden input)
+* 📁 **Full path to the folder to back up**
+* 🗂️ Whether B2 should manage file versions (yes/no)
 * 🚫 Optional file extensions to exclude (comma‑separated)
-
-Once completed, the configuration is saved and reused automatically.
 
 ---
 
@@ -76,25 +87,25 @@ Once completed, the configuration is saved and reused automatically.
 
 ### `.env`
 
-Created automatically on first run.
+Automatically created after setup and reused on future runs.
 
 Example:
 
 ```env
 B2_BUCKET=my-backup-bucket
-B2_KEY_ID=your-key-id
-B2_APP_KEY=your-app-key
-BACKUP_PATH=C:\\ImportantFiles
+B2_KEY_ID=abc123
+B2_APP_KEY=xxxxxxxxxxxxxxxx
+BACKUP_PATH=C:\ImportantFiles
 VERSIONING=yes
 ```
 
-If you want to reconfigure everything, simply delete `.env` and rerun the script.
+> ⚠️ **Never commit `.env` to source control**
 
 ---
 
-### `exclude_patterns.txt`
+### `exclude_patterns.txt` (optional)
 
-Optional file created during setup if exclusions are defined.
+Created only if exclusions are specified.
 
 Example:
 
@@ -104,89 +115,88 @@ Example:
 .bak
 ```
 
-Any file matching these extensions will be skipped.
+* One extension per line
+* Case‑insensitive
+* Applied during upload traversal
 
 ---
 
-## ☁️ Backblaze B2 Behavior
+## 🔁 Running Subsequent Backups
 
-* Files are uploaded using **relative paths**, preserving folder structure
-* Existing files are overwritten as **new versions** (if versioning is enabled)
-* Retention and lifecycle rules are controlled **entirely in the B2 console**
-
-This script intentionally does **not** delete remote files.
-
----
-
-## 🔄 Running Future Backups
-
-After the first setup:
+After initial setup, simply run:
 
 ```bash
 python backup_to_b2.py
 ```
 
-No prompts — it just runs.
+The script will:
 
-This makes the script safe for:
+1. Load `.env`
+2. Authenticate to Backblaze B2
+3. Upload all files recursively
+4. Skip excluded file types
 
-* Windows Task Scheduler
-* cron jobs
-* Manual execution
-* Automation tools
+---
+
+## ☁️ File Versioning & Retention
+
+If enabled during setup:
+
+* **Backblaze B2 handles versioning**, not the script
+* Older versions are retained according to **bucket lifecycle rules**
+* The script always uploads files as‑is (no local diffing)
 
 ---
 
 ## 🔐 Security Notes
 
-* Never commit `.env` or `exclude_patterns.txt`
-* Use **restricted‑scope B2 application keys** when possible
-* Protect the machine where credentials are stored
+* Application keys are stored **locally only** in `.env`
+* The script does not transmit credentials anywhere except Backblaze
+* Protect the directory containing `.env`
+* Use OS‑level disk encryption on shared systems
 
 ---
 
-## 📂 Project Layout
+## 🔧 Reconfiguring the Script
+
+To re‑run the setup wizard:
+
+```bash
+del .env
+# or
+rm .env
+
+python backup_to_b2.py
+```
+
+You may also edit `.env` or `exclude_patterns.txt` manually.
+
+---
+
+## 📂 Directory Layout
 
 ```text
 .
 ├── backup_to_b2.py          # Main script
-├── .env                    # Auto‑generated configuration (DO NOT COMMIT)
-├── exclude_patterns.txt    # Optional exclusion list
-└── README.md               # This file
+├── .env                    # Auto-generated configuration
+├── exclude_patterns.txt    # Optional exclusions
+└── README.md               # Documentation
 ```
 
 ---
 
-## ❓ Troubleshooting
+## 🙌 Notes
 
-**Dependencies fail to install**
+This script is intentionally **simple and transparent**:
 
-* Ensure Python is installed and `pip` works
-* Try running:
+* No background services
+* No hidden scheduling
+* No destructive operations
 
-  ```bash
-  python -m pip install --upgrade pip
-  ```
-
-**Permission errors**
-
-* Verify the backup path exists and is readable
-* Verify the B2 key has write access to the bucket
+It is designed to be easy to audit, modify, and integrate into your own automation workflows.
 
 ---
 
 ## 📜 License
 
 MIT License — free to use, modify, and distribute.
-
----
-
-## 🙌 Notes
-
-This script intentionally prioritizes:
-
-* Simplicity
-* Transparency
-* Native SDK usage
-
-No background services, no magic, no lock‑in.
