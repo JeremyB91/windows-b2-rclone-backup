@@ -32,6 +32,11 @@ from dotenv import load_dotenv, set_key
 
 ENV_PATH = Path(".env")
 EXCLUDE_PATH = Path("exclude_patterns.txt")
+LOG_PATH = Path("scheduler_log.txt")
+
+def log_scheduler_output(msg: str):
+    with open(LOG_PATH, "a", encoding="utf-8") as f:
+        f.write(msg + "\n")
 
 def prompt_and_save_env():
     print(Fore.CYAN + "\n=== 🔧 Backup Configuration Setup ===")
@@ -47,7 +52,7 @@ def prompt_and_save_env():
     print("3. Monthly (e.g. every 15th)")
     print("4. One-Time")
     print("5. Do not schedule")
-    schedule_type = input(Fore.GREEN + "Select a schedule type [1-5]: ").strip()
+    schedule_choice = input(Fore.GREEN + "Select a schedule type [1-5]: ").strip()
 
     schedule_map = {
         "1": "DAILY",
@@ -56,7 +61,7 @@ def prompt_and_save_env():
         "4": "ONCE",
         "5": "NONE"
     }
-    schedule_type = schedule_map.get(schedule_type, "DAILY")
+    schedule_type = schedule_map.get(schedule_choice, "DAILY")
     task_details = {"type": schedule_type}
 
     if schedule_type != "NONE":
@@ -142,6 +147,10 @@ def upload_directory_to_b2(b2_api, bucket_name, local_folder):
             print(Fore.LIGHTBLACK_EX + f"⏭️ Skipped (excluded): {file_path.name}")
 
 def schedule_task(cfg):
+    # Log start
+    log_scheduler_output(f"Scheduling run: type={cfg['schedule_type']} time={cfg['schedule_time']}"
+                         f" days={cfg['schedule_days']} dates={cfg['schedule_dates']}")
+
     if cfg["schedule_type"] == "NONE":
         print(Fore.YELLOW + "\n⚠️ Skipping task scheduling.")
         return
@@ -149,7 +158,7 @@ def schedule_task(cfg):
     current_script = Path(__file__).resolve()
     task_name = "BackupToBackblazeB2"
 
-    cmd = [
+    base_cmd = [
         "schtasks",
         "/Create",
         "/TN", task_name,
@@ -158,6 +167,40 @@ def schedule_task(cfg):
     ]
 
     if cfg["schedule_type"] == "DAILY":
-        cmd += ["/SC", "DAILY", "/ST", cfg["schedule_time"]]
+        sch_cmd = base_cmd + ["/SC", "DAILY", "/ST", cfg["schedule_time"]]
     elif cfg["schedule_type"] == "WEEKLY":
-        cmd += ["/SC", "WEEKLY", "/D", cfg["schedule_days"], "/ST"_]()]()
+        sch_cmd = base_cmd + ["/SC", "WEEKLY", "/D", cfg["schedule_days"], "/ST", cfg["schedule_time"]]
+    elif cfg["schedule_type"] == "MONTHLY":
+        sch_cmd = base_cmd + ["/SC", "MONTHLY", "/D", cfg["schedule_dates"], "/ST", cfg["schedule_time"]]
+    elif cfg["schedule_type"] == "ONCE":
+        sch_cmd = base_cmd + ["/SC", "ONCE", "/ST", cfg["schedule_time"]]
+    else:
+        log_scheduler_output(f"Unknown schedule type: {cfg['schedule_type']}")
+        print(Fore.RED + "Unknown schedule type, skipping scheduling.")
+        return
+
+    full_command = " ".join(sch_cmd)
+    log_scheduler_output(f"Running command: {full_command}")
+
+    try:
+        result = subprocess.run(full_command, shell=True, capture_output=True, text=True)
+        log_scheduler_output("STDOUT:\n" + result.stdout.strip())
+        log_scheduler_output("STDERR:\n" + result.stderr.strip())
+
+        if result.returncode == 0:
+            print(Fore.GREEN + "\n✅ Scheduled Task created successfully.")
+        else:
+            print(Fore.RED + "\n❌ Failed to create Scheduled Task. See scheduler_log.txt for details.")
+    except Exception as e:
+        log_scheduler_output(f"Exception scheduling task: {str(e)}")
+        print(Fore.RED + "\n❌ Exception occurred while scheduling. See scheduler_log.txt.")
+
+def main():
+    config = load_config()
+    b2_api = connect_to_b2(config["key_id"], config["app_key"])
+    upload_directory_to_b2(b2_api, config["bucket"], config["backup_path"])
+    schedule_task(config)
+    print(Fore.GREEN + "\n✅ Backup complete.")
+
+if __name__ == "__main__":
+    main()
