@@ -61,8 +61,8 @@ Backup your local Windows folders to a **Backblaze B2 bucket** with an **interac
 ### 1. Clone or download this repository
 
 ```bash
-git clone https://github.com/yourname/yourrepo.git
-cd yourrepo
+git clone https://github.com/yJeremyB91/windows-b2-rclone-backup.git
+cd windows-b2-rclone-backup
 ```
 
 ### 2. Run the script
