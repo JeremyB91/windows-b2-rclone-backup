@@ -4,7 +4,11 @@ import subprocess
 import sys
 from pathlib import Path
 from getpass import getpass
+from datetime import datetime
 
+# -------------------------------------------------
+# Dependency bootstrap
+# -------------------------------------------------
 def install_prerequisites():
     try:
         import b2sdk.v2
@@ -34,10 +38,17 @@ ENV_PATH = Path(".env")
 EXCLUDE_PATH = Path("exclude_patterns.txt")
 LOG_PATH = Path("scheduler_log.txt")
 
-def log_scheduler_output(msg: str):
+# -------------------------------------------------
+# Logging
+# -------------------------------------------------
+def log(msg: str):
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     with open(LOG_PATH, "a", encoding="utf-8") as f:
-        f.write(msg + "\n")
+        f.write(f"[{timestamp}] {msg}\n")
 
+# -------------------------------------------------
+# Config setup
+# -------------------------------------------------
 def prompt_and_save_env():
     print(Fore.CYAN + "\n=== 🔧 Backup Configuration Setup ===")
     bucket_name = input(Fore.GREEN + "🪣 B2 Bucket Name: ").strip()
@@ -45,15 +56,14 @@ def prompt_and_save_env():
     app_key = getpass(Fore.GREEN + "🔒 B2 Application Key (hidden): ").strip()
     local_folder = input(Fore.GREEN + "📁 Full path to folder to backup: ").strip()
 
-    # Schedule setup
     print(Fore.CYAN + "\n📅 Schedule Options:")
     print("1. Daily")
-    print("2. Weekly (e.g. every Monday)")
-    print("3. Monthly (e.g. every 15th)")
+    print("2. Weekly")
+    print("3. Monthly")
     print("4. One-Time")
     print("5. Do not schedule")
-    schedule_choice = input(Fore.GREEN + "Select a schedule type [1-5]: ").strip()
 
+    schedule_choice = input(Fore.GREEN + "Select [1-5]: ").strip()
     schedule_map = {
         "1": "DAILY",
         "2": "WEEKLY",
@@ -61,30 +71,20 @@ def prompt_and_save_env():
         "4": "ONCE",
         "5": "NONE"
     }
+
     schedule_type = schedule_map.get(schedule_choice, "DAILY")
-    task_details = {"type": schedule_type}
+    time_val = days = dates = ""
 
     if schedule_type != "NONE":
-        time_input = input(Fore.GREEN + "⏰ Time (HH:MM, 24h format): ").strip()
-        task_details["time"] = time_input
+        time_val = input(Fore.GREEN + "⏰ Time (HH:MM): ").strip()
 
         if schedule_type == "WEEKLY":
-            days = input(Fore.GREEN + "🗓️ Enter days (e.g. MON,TUE,FRI): ").strip().upper()
-            task_details["days"] = days
+            days = input(Fore.GREEN + "🗓️ Days (MON,TUE,...): ").strip().upper()
         elif schedule_type == "MONTHLY":
-            dates = input(Fore.GREEN + "📅 Enter day(s) of month (e.g. 1,15,28): ").strip()
-            task_details["dates"] = dates
+            dates = input(Fore.GREEN + "📅 Dates (1,15,28): ").strip()
 
-    versioning = input(Fore.GREEN + "🗂️ Let B2 manage versions of files? [Y/n]: ").strip().lower()
-    enable_versioning = "yes" if versioning != "n" else "no"
-
-    exclude = input(Fore.GREEN + "🚫 Exclude file extensions? (comma-separated, e.g. .tmp,.log) or leave blank: ").strip()
-    if exclude:
-        with open(EXCLUDE_PATH, "w") as f:
-            f.write("\n".join([e.strip() for e in exclude.split(",") if e.strip()]))
-        print(Fore.YELLOW + f"📝 Exclusion patterns saved to {EXCLUDE_PATH}")
-    elif EXCLUDE_PATH.exists():
-        EXCLUDE_PATH.unlink()
+    versioning = input(Fore.GREEN + "🗂️ Let B2 manage versions? [Y/n]: ").strip().lower()
+    versioning = "yes" if versioning != "n" else "no"
 
     with open(ENV_PATH, "w") as f:
         f.write("")
@@ -93,11 +93,11 @@ def prompt_and_save_env():
     set_key(ENV_PATH, "B2_KEY_ID", key_id)
     set_key(ENV_PATH, "B2_APP_KEY", app_key)
     set_key(ENV_PATH, "BACKUP_PATH", local_folder)
-    set_key(ENV_PATH, "VERSIONING", enable_versioning)
-    set_key(ENV_PATH, "SCHEDULE_TYPE", task_details["type"])
-    set_key(ENV_PATH, "SCHEDULE_TIME", task_details.get("time", ""))
-    set_key(ENV_PATH, "SCHEDULE_DAYS", task_details.get("days", ""))
-    set_key(ENV_PATH, "SCHEDULE_DATES", task_details.get("dates", ""))
+    set_key(ENV_PATH, "VERSIONING", versioning)
+    set_key(ENV_PATH, "SCHEDULE_TYPE", schedule_type)
+    set_key(ENV_PATH, "SCHEDULE_TIME", time_val)
+    set_key(ENV_PATH, "SCHEDULE_DAYS", days)
+    set_key(ENV_PATH, "SCHEDULE_DATES", dates)
 
     print(Fore.YELLOW + "\n✅ Configuration saved to .env")
 
@@ -111,95 +111,96 @@ def load_config():
         "key_id": os.getenv("B2_KEY_ID"),
         "app_key": os.getenv("B2_APP_KEY"),
         "backup_path": os.getenv("BACKUP_PATH"),
-        "versioning": os.getenv("VERSIONING", "yes"),
         "schedule_type": os.getenv("SCHEDULE_TYPE"),
         "schedule_time": os.getenv("SCHEDULE_TIME"),
         "schedule_days": os.getenv("SCHEDULE_DAYS"),
         "schedule_dates": os.getenv("SCHEDULE_DATES"),
     }
 
+# -------------------------------------------------
+# B2
+# -------------------------------------------------
 def connect_to_b2(key_id, app_key):
     info = InMemoryAccountInfo()
-    b2_api = B2Api(info)
-    b2_api.authorize_account("production", key_id, app_key)
-    return b2_api
+    api = B2Api(info)
+    api.authorize_account("production", key_id, app_key)
+    return api
 
-def should_exclude(file_path):
-    if not EXCLUDE_PATH.exists():
-        return False
-    ext = file_path.suffix.lower()
-    with open(EXCLUDE_PATH, "r") as f:
-        excluded = [line.strip().lower() for line in f if line.strip()]
-    return ext in excluded
+def upload_directory_to_b2(api, bucket_name, local_folder):
+    bucket = api.get_bucket_by_name(bucket_name)
+    root = Path(local_folder)
 
-def upload_directory_to_b2(b2_api, bucket_name, local_folder):
-    bucket = b2_api.get_bucket_by_name(bucket_name)
-    local_folder_path = Path(local_folder)
+    for file in root.rglob("*"):
+        if file.is_file():
+            remote = str(file.relative_to(root)).replace("\\", "/")
+            print(Fore.BLUE + f"🔼 Uploading {remote}")
+            bucket.upload(UploadSourceLocalFile(str(file)), remote)
 
-    print(Fore.YELLOW + f"\n📤 Uploading files from '{local_folder_path}' to B2 bucket '{bucket_name}'...\n")
-
-    for file_path in local_folder_path.rglob('*'):
-        if file_path.is_file() and not should_exclude(file_path):
-            rel_path = str(file_path.relative_to(local_folder_path)).replace("\\", "/")
-            print(Fore.BLUE + f"🔼 Uploading: {rel_path}")
-            bucket.upload(UploadSourceLocalFile(str(file_path)), rel_path)
-        elif file_path.is_file():
-            print(Fore.LIGHTBLACK_EX + f"⏭️ Skipped (excluded): {file_path.name}")
-
+# -------------------------------------------------
+# Scheduling (FIXED)
+# -------------------------------------------------
 def schedule_task(cfg):
-    # Log start
-    log_scheduler_output(f"Scheduling run: type={cfg['schedule_type']} time={cfg['schedule_time']}"
-                         f" days={cfg['schedule_days']} dates={cfg['schedule_dates']}")
-
     if cfg["schedule_type"] == "NONE":
-        print(Fore.YELLOW + "\n⚠️ Skipping task scheduling.")
+        print(Fore.YELLOW + "⚠️ Scheduling skipped.")
         return
 
-    current_script = Path(__file__).resolve()
     task_name = "BackupToBackblazeB2"
+    script = Path(__file__).resolve()
+    username = os.environ.get("USERNAME")
 
     base_cmd = [
         "schtasks",
         "/Create",
         "/TN", task_name,
-        "/TR", f'"{sys.executable}" "{current_script}"',
+        "/TR", f'"{sys.executable}" "{script}"',
+        "/RU", username,
+        "/RL", "LIMITED",
         "/F"
     ]
 
     if cfg["schedule_type"] == "DAILY":
-        sch_cmd = base_cmd + ["/SC", "DAILY", "/ST", cfg["schedule_time"]]
+        base_cmd += ["/SC", "DAILY", "/ST", cfg["schedule_time"]]
+
     elif cfg["schedule_type"] == "WEEKLY":
-        sch_cmd = base_cmd + ["/SC", "WEEKLY", "/D", cfg["schedule_days"], "/ST", cfg["schedule_time"]]
+        base_cmd += ["/SC", "WEEKLY", "/D", cfg["schedule_days"], "/ST", cfg["schedule_time"]]
+
     elif cfg["schedule_type"] == "MONTHLY":
-        sch_cmd = base_cmd + ["/SC", "MONTHLY", "/D", cfg["schedule_dates"], "/ST", cfg["schedule_time"]]
+        base_cmd += ["/SC", "MONTHLY", "/D", cfg["schedule_dates"], "/ST", cfg["schedule_time"]]
+
     elif cfg["schedule_type"] == "ONCE":
-        sch_cmd = base_cmd + ["/SC", "ONCE", "/ST", cfg["schedule_time"]]
+        today = datetime.now().strftime("%m/%d/%Y")
+        base_cmd += ["/SC", "ONCE", "/ST", cfg["schedule_time"], "/SD", today]
+
+    cmd_str = " ".join(base_cmd)
+    log(f"Running: {cmd_str}")
+
+    result = subprocess.run(cmd_str, shell=True, capture_output=True, text=True)
+    log("STDOUT: " + result.stdout)
+    log("STDERR: " + result.stderr)
+
+    # VERIFY
+    verify = subprocess.run(
+        f'schtasks /Query /TN "{task_name}"',
+        shell=True,
+        capture_output=True,
+        text=True
+    )
+
+    if verify.returncode == 0:
+        print(Fore.GREEN + "✅ Scheduled task created and verified.")
+        log("Task verified successfully.")
     else:
-        log_scheduler_output(f"Unknown schedule type: {cfg['schedule_type']}")
-        print(Fore.RED + "Unknown schedule type, skipping scheduling.")
-        return
+        print(Fore.RED + "❌ Task not found after creation.")
+        log("Task verification failed.")
 
-    full_command = " ".join(sch_cmd)
-    log_scheduler_output(f"Running command: {full_command}")
-
-    try:
-        result = subprocess.run(full_command, shell=True, capture_output=True, text=True)
-        log_scheduler_output("STDOUT:\n" + result.stdout.strip())
-        log_scheduler_output("STDERR:\n" + result.stderr.strip())
-
-        if result.returncode == 0:
-            print(Fore.GREEN + "\n✅ Scheduled Task created successfully.")
-        else:
-            print(Fore.RED + "\n❌ Failed to create Scheduled Task. See scheduler_log.txt for details.")
-    except Exception as e:
-        log_scheduler_output(f"Exception scheduling task: {str(e)}")
-        print(Fore.RED + "\n❌ Exception occurred while scheduling. See scheduler_log.txt.")
-
+# -------------------------------------------------
+# Main
+# -------------------------------------------------
 def main():
-    config = load_config()
-    b2_api = connect_to_b2(config["key_id"], config["app_key"])
-    upload_directory_to_b2(b2_api, config["bucket"], config["backup_path"])
-    schedule_task(config)
+    cfg = load_config()
+    api = connect_to_b2(cfg["key_id"], cfg["app_key"])
+    upload_directory_to_b2(api, cfg["bucket"], cfg["backup_path"])
+    schedule_task(cfg)
     print(Fore.GREEN + "\n✅ Backup complete.")
 
 if __name__ == "__main__":
